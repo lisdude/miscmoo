@@ -28,7 +28,6 @@ set_verb_code(#0, "do_start_script", {
 "      - Show object names when returning objects.";
 set_verb_code(#2, "eval", {
   "set_task_perms(player);",
-  "try",
   "  eval_env = \"me=player; here=player.location;\";",
   "  program = argstr;",
   "  if (!match(program, \"^ *%(;%|%(if%|fork?%|return%|while%|try%)[^a-z0-9A-Z_]%)\"))",
@@ -47,15 +46,7 @@ set_verb_code(#2, "eval", {
   "    for line in (result)",
   "      notify(player, line);",
   "    endfor",
-  "  endif",
-  "except ex (ANY)",
-  "  {line, @lines} = ex[4];",
-  "  notify(player, tostr(line[4], \":\", line[2], (line[4] != line[1]) ? tostr(\" (this == \", line[1], \")\") | \"\", \", line \", line[6], \":  \", ex[2]));",
-  "  for line in (lines)",
-  "    notify(player, tostr(\"... called from \", line[4], \":\", line[2], (line[4] != line[1]) ? tostr(\" (this == \", line[1], \")\") | \"\", \", line \", line[6]));",
-  "  endfor",
-  "  notify(player, \"(End of traceback)\");",
-  "endtry"
+  "  endif"
 });
 
 "Swap Wizard (#3) and The First Room (#2) because it's what I'm used to.";
