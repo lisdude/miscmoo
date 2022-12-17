@@ -21,13 +21,18 @@ endif
 "Very basic object matching:";
 if (object[1] == "#")
 object = toobj(object);
+elseif (object[1] == "$")
+object = `#0.(object[2..$]) ! ANY';
+if (typeof(object) == ERR)
+return notify(player, tostr("#0 doesn't define that property."));
+endif
 elseif (object == "me")
 object = player;
 elseif (object == "here")
 object = player.location;
 else
 exact = partial = {};
-for x in ({@player.contents, @player.location.contents})
+for x in ({@player.contents, @`player.location.contents ! E_INVIND => {}'})
 if (!valid(x))
 continue;
 elseif (x.name == object)
