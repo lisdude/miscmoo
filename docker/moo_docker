@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+
+# A ToastStunt Docker helper script.
+
+set -Eeuo pipefail
+
+# Some assumptions are made here about names of volumes, containers, etc...
+MOO_NAME=${1:-}
+MOO_VOLUME="${MOO_NAME}_moo_data"
+MOO_CONTAINER="${MOO_NAME}-toaststunt-1"
+DB_FILE=$(grep -oP '(?<=- DATABASE=)[^[:space:].]+\.db' compose.yaml)
+FILE_OWNER="65534:65534"
+
+# Explain usage...
+usage() {
+    cat <<EOF
+Usage: $(basename "${BASH_SOURCE[0]}") MOO_NAME [cp <file>] [lcp <file>] [emergency] [clean] [delete]
+
+A Docker helper script for ToastStunt. The first, and only required, argument
+is the name of your MOO or some other unique identifier (no spaces).
+
+Without any other arguments, your MOO will either start if it's not currently
+running or stop if it is currently running.
+
+Additional arguments:
+    cp <file>         Copy <file> to the MOO volume.
+    lcp <file>        Copy <file> from the MOO volume to the local filesystem.
+    emergency         Invoke emergency wizard mode in a temporary container.
+    clean             Delete the container.
+    delete            Delete the container AND the storage volume.
+EOF
+exit
+}
+
+# Create a Docker container and, if necessary, copy the database to the new volume
+# with appropriate ownership.
+setup_and_run() {
+    if [ ! -f "${DB_FILE}" ]; then
+        echo "${DB_FILE} was not found. Unable to create Docker container."
+        exit 1
+    fi
+
+    local VOLUME_FOUND=$(docker volume inspect "${MOO_VOLUME}" 2>/dev/null)
+
+    docker compose -p "${MOO_NAME}" up -d || { echo "Failed to create a Docker container for '${MOO_NAME}'."; exit 1; }
+
+    if [ "${VOLUME_FOUND}" = "[]" ]; then
+        # We could use 'copy_to_moo "${DB_FILE}"' here, but we need to create files and executables directories.
+        # So it makes more sense to only run one temporary container rather than two.
+        docker cp "${DB_FILE}" "${MOO_CONTAINER}:/moo" || { echo "Failed to copy '${DB_FILE}' to the volume '${MOO_VOLUME}'."; exit 1; }
+        docker run --rm -v "${MOO_VOLUME}":/moo alpine /bin/sh -c "mkdir -p /moo/executables /moo/files && chown -R ${FILE_OWNER} /moo" || { echo "Failed to change ownership of '${files}'."; exit 1; }
+        docker compose -p "${MOO_NAME}" restart || { echo "Failed to restart Docker container for '${MOO_NAME}'."; exit 1; }
+    fi
+}
+
+# Start the container if it's stopped or stop it if it's running.
+toggle_running() {
+    if ! docker inspect "${MOO_CONTAINER}" &>/dev/null; then
+        setup_and_run
+    elif [ "$(docker inspect -f '{{.State.Running}}' "${MOO_CONTAINER}")" == "false" ]; then
+        docker compose -p "${MOO_NAME}" start || { echo "Failed to start Docker container for '${MOO_NAME}'."; exit 1; }
+    else
+        docker compose -p "${MOO_NAME}" stop || { echo "Failed to stop Docker container for '${MOO_NAME}'."; exit 1; }
+    fi
+}
+
+# Copy a file to the MOO container and change ownership appropriately.
+copy_to_moo() {
+    local files=${3:-$1}
+    docker cp $files "${MOO_CONTAINER}:/moo" || { echo "Failed to copy '${files}' to the volume '${MOO_VOLUME}'."; exit 1; }
+    docker run --rm -v "${MOO_VOLUME}":/moo alpine /bin/sh -c "chown -R ${FILE_OWNER} /moo" || { echo "Failed to change ownership of '${files}'."; exit 1; }
+}
+
+# Copy a file from the MOO container to the local directory.
+copy_from_moo() {
+    local files=$3
+    docker cp "${MOO_CONTAINER}":/moo/$files ./ || { echo "Failed to copy '${files}' from '${MOO_VOLUME}' to the current directory."; exit 1; }
+}
+
+# Shut down the container (if necessary) and invoke emergency wizard mode in a temporary interactive container.
+emergency() {
+    if [ "$(docker inspect -f '{{.State.Running}}' "$MOO_CONTAINER")" == "true" ]; then
+        docker compose -p "${MOO_NAME}" stop || { echo "Failed to stop running container. Aborting."; exit 1; }
+    fi
+
+    TMP_PORTS=$(grep -E "^ *- *\"[0-9]+:[0-9]+\"" compose.yaml)
+    MOO_PORT=$(echo "${TMP_PORTS}" | cut -d'"' -f2)
+
+    docker run -it --rm --name "${MOO_NAME}-emergency-wizard" --cap-drop=all --security-opt=no-new-privileges -v "${MOO_VOLUME}":/moo -e DATABASE="${DB_FILE}" -e EMERGENCY=TRUE -p "${MOO_PORT}" toaststunt || { echo "Failed to start emergency wizard mode. Aborting."; exit 1; }
+}
+
+# Delete the Docker container.
+cleanup() {
+    docker compose -p "${MOO_NAME}" down || { echo "Failed to clean up container."; exit 1; }
+}
+
+# Delete the Docker container and the MOO volume.
+delete_moo() {
+    cleanup
+    docker volume rm ${MOO_VOLUME} || { echo "Failed to delete the Docker volume '${MOO_VOLUME}'."; exit 1; }
+}
+
+if [ $# -eq 0 ]; then
+    usage
+elif [ $# -eq 1 ]; then
+    toggle_running
+elif [ "$2" == "cp" ]; then
+    copy_to_moo "$@"
+elif [ "$2" == "lcp" ]; then
+    copy_from_moo "$@"
+elif [ "$2" == "emergency" ]; then
+    emergency
+elif [ "$2" == "clean" ]; then
+    cleanup
+elif [ "$2" == "delete" ]; then
+    delete_moo
+fi
+

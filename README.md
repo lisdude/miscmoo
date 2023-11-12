@@ -2,3 +2,4 @@ This repository is just a dumping ground for miscellaneous MOO verbs and scripts
 
 # Stuff
 - **Minimal**: Verbs and scripts I find useful for working with Minimal.db.
+- **Docker**: A minimalistic ToastStunt Docker image.

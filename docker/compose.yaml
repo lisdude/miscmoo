@@ -1,0 +1,24 @@
+services:
+  toaststunt:
+    image: toaststunt
+    build:
+      context: .
+      dockerfile: Dockerfile
+    cap_drop:
+      - all
+    ulimits:
+      nproc: 7                        # Replace with TOTAL_BACKGROUND_THREADS + 3 (one for moo, checkpoint, and curl name lookups)
+    security_opt:
+      - no-new-privileges
+    ports:
+      - "8888:7777"                   # Replace 8888 with your desired port.
+    volumes:
+      - moo_data:/moo                 # Volume or path where your database is stored. (Note: Default volume will be toaststunt_moo_data)
+    environment:
+      - DATABASE=toastcore.db         # MOO database name. Will save as database.db.new
+      - LOG_FILE=/moo/moo.log         # Comment this out if you want logs to show up in 'docker compose logs'.
+      - MISC_ARGS=""                  # Any custom arguments that should be passed to the MOO binary inside the container.
+
+volumes:
+  moo_data:
+
