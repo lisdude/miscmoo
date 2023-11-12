@@ -57,10 +57,10 @@ RUN mkdir /toaststunt                                        \
     && chown 65534:65534 /toaststunt                         \
     && cp ./moo /toaststunt                                  \
     && cp ./restart /toaststunt                              \
-    && cp ../Minimal.db /toaststunt                        \
-    && mkdir -p /moo/executables /moo/files \
-    && ln -s /moo/executables /toaststunt/executables \
-    && ln -s /moo/files /toaststunt/files \
+    && cp ../Minimal.db /toaststunt                          \
+    && mkdir -p /moo/executables /moo/files                  \
+    && ln -s /moo/executables /toaststunt/executables        \
+    && ln -s /moo/files /toaststunt/files                    \
     && mkdir -p /toaststunt/executables /toaststunt/files
 
 ##################################################################################
