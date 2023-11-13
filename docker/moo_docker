@@ -28,6 +28,7 @@ Additional arguments:
     emergency         Invoke emergency wizard mode in a temporary container.
     clean             Delete the container.
     delete            Delete the container AND the storage volume.
+    shell             Run an alpine container with the storage volume mounted (at /moo) and the current directory mounted (at /data).
 EOF
 exit
 }
@@ -100,6 +101,12 @@ delete_moo() {
     docker volume rm ${MOO_VOLUME} || { echo "Failed to delete the Docker volume '${MOO_VOLUME}'."; exit 1; }
 }
 
+# Run an alpine container with the stoage volume and current directory mounted.
+run_shell()
+{
+    docker run --rm -it -v "${MOO_VOLUME}":/moo -v ./:/data alpine /bin/sh -c "cd /moo && /bin/sh"
+}
+
 if [ $# -eq 0 ]; then
     usage
 elif [ $# -eq 1 ]; then
@@ -114,5 +121,7 @@ elif [ "$2" == "clean" ]; then
     cleanup
 elif [ "$2" == "delete" ]; then
     delete_moo
+elif [ "$2" == "shell" ]; then
+    run_shell
 fi
 
