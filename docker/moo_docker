@@ -24,10 +24,11 @@ Without any other arguments, your MOO will either start if it's not currently
 running or stop if it is currently running.
 
 Additional arguments:
+    emergency         Invoke emergency wizard mode in a temporary container.
     cp <file>         Copy <file> to the MOO volume.
     lcp <file>        Copy <file> from the MOO volume to the local filesystem.
-    emergency         Invoke emergency wizard mode in a temporary container.
-    clean             Delete the container.
+    export            Export the contents of the storage volume into a MOO_NAME directory.
+    clean             Delete the container without affecting the storage volume.
     delete            Delete the container AND the storage volume.
     shell             Run an alpine container with the storage volume mounted (at /moo) and the current directory mounted (at /data).
 EOF
@@ -43,6 +44,7 @@ setup_and_run() {
     fi
 
     local VOLUME_FOUND=$(docker volume inspect "${MOO_VOLUME}" 2>/dev/null)
+    echo "${VOLUME_FOUND}"
 
     docker compose -p "${MOO_NAME}" up -d || { echo "Failed to create a Docker container for '${MOO_NAME}'."; exit 1; }
 
@@ -50,7 +52,7 @@ setup_and_run() {
         # We could use 'copy_to_moo "${DB_FILE}"' here, but we need to create files and executables directories.
         # So it makes more sense to only run one temporary container rather than two.
         docker cp "${DB_FILE}" "${MOO_CONTAINER}:/moo" || { echo "Failed to copy '${DB_FILE}' to the volume '${MOO_VOLUME}'."; exit 1; }
-        docker run --rm -v "${MOO_VOLUME}":/moo alpine /bin/sh -c "umask 0077 && mkdir -p /moo/executables /moo/files && chown -R ${FILE_OWNER} /moo" || { echo "Failed to change ownership of '${files}'."; exit 1; }
+        docker run --rm -v "${MOO_VOLUME}":/moo busybox /bin/sh -c "umask ${DEFAULT_UMASK} && mkdir -p /moo/executables /moo/files && chown -R ${FILE_OWNER} /moo" || { echo "Failed to change ownership of '${files}'."; exit 1; }
         docker compose -p "${MOO_NAME}" restart || { echo "Failed to restart Docker container for '${MOO_NAME}'."; exit 1; }
     fi
 }
@@ -70,7 +72,7 @@ toggle_running() {
 copy_to_moo() {
     local files=${3:-$1}
     docker cp $files "${MOO_CONTAINER}:/moo" || { echo "Failed to copy '${files}' to the volume '${MOO_VOLUME}'."; exit 1; }
-    docker run --rm -v "${MOO_VOLUME}":/moo alpine /bin/sh -c "umask 0077 && chown -R ${FILE_OWNER} /moo" || { echo "Failed to change ownership of '${files}'."; exit 1; }
+    docker run --rm -v "${MOO_VOLUME}":/moo busybox /bin/sh -c "umask ${DEFAULT_UMASK} && chown -R ${FILE_OWNER} /moo" || { echo "Failed to change ownership of '${files}'."; exit 1; }
 }
 
 # Copy a file from the MOO container to the local directory.
@@ -85,8 +87,8 @@ emergency() {
         docker compose -p "${MOO_NAME}" stop || { echo "Failed to stop running container. Aborting."; exit 1; }
     fi
 
-    TMP_PORTS=$(grep -E "^ *- *\"[0-9]+:[0-9]+\"" compose.yaml)
-    MOO_PORT=$(echo "${TMP_PORTS}" | cut -d'"' -f2)
+    local TMP_PORTS=$(grep -E "^ *- *\"[0-9]+:[0-9]+\"" compose.yaml)
+    local MOO_PORT=$(echo "${TMP_PORTS}" | cut -d'"' -f2)
 
     docker run -it --rm --name "${MOO_NAME}-emergency-wizard" --cap-drop=all --security-opt=no-new-privileges -v "${MOO_VOLUME}":/moo -e DATABASE="${DB_FILE}" -e EMERGENCY=TRUE -p "${MOO_PORT}" toaststunt || { echo "Failed to start emergency wizard mode. Aborting."; exit 1; }
 }
@@ -99,13 +101,27 @@ cleanup() {
 # Delete the Docker container and the MOO volume.
 delete_moo() {
     cleanup
-    docker volume rm ${MOO_VOLUME} || { echo "Failed to delete the Docker volume '${MOO_VOLUME}'."; exit 1; }
+    docker volume rm "${MOO_VOLUME}" || { echo "Failed to delete the Docker volume '${MOO_VOLUME}'."; exit 1; }
 }
 
 # Run an alpine container with the stoage volume and current directory mounted.
-run_shell()
-{
+run_shell() {
     docker run --rm -it -v "${MOO_VOLUME}":/moo -v ./:/data alpine /bin/sh -c "cd /moo && /bin/sh"
+}
+
+cleanup_temp_container() {
+    local container_id=$1
+    docker stop "${container_id}"
+    docker rm "${container_id}"
+}
+
+# Copy all of the MOO data into a local directory.
+export_data()
+{
+    local container_id=$(docker run -d --name "${MOO_NAME}_temporary_container" -v "${MOO_VOLUME}":/moo busybox /bin/sh) || { echo "Failed to create temporary container. Aborting."; exit 1; }
+    mkdir -p ./"${MOO_NAME}" || { echo "Failed to create export directory."; cleanup_temp_container "${container_id}"; exit 1; }
+    docker cp "${container_id}":/moo ./"${MOO_NAME}" || { echo "Export failed."; cleanup_temp_container "${container_id}"; exit 1; }
+    cleanup_temp_container "${container_id}"
 }
 
 if [ $# -eq 0 ]; then
@@ -124,5 +140,7 @@ elif [ "$2" == "delete" ]; then
     delete_moo
 elif [ "$2" == "shell" ]; then
     run_shell
+elif [ "$2" == "export" ]; then
+    export_data
 fi
 
