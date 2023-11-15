@@ -1,6 +1,7 @@
 services:
   toaststunt:
     image: toaststunt
+    stop_grace_period: 30s            # The amount of time Docker will wait to safely shut down the MOO.
     build:
       context: .
       dockerfile: Dockerfile
