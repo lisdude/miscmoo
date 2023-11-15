@@ -10,6 +10,7 @@ MOO_VOLUME="${MOO_NAME}_moo_data"
 MOO_CONTAINER="${MOO_NAME}-toaststunt-1"
 DB_FILE=$(grep -oP '(?<=- DATABASE=)[^[:space:].]+\.db' compose.yaml)
 FILE_OWNER="65534:65534"
+DEFAULT_UMASK="0077"
 
 # Explain usage...
 usage() {
@@ -49,7 +50,7 @@ setup_and_run() {
         # We could use 'copy_to_moo "${DB_FILE}"' here, but we need to create files and executables directories.
         # So it makes more sense to only run one temporary container rather than two.
         docker cp "${DB_FILE}" "${MOO_CONTAINER}:/moo" || { echo "Failed to copy '${DB_FILE}' to the volume '${MOO_VOLUME}'."; exit 1; }
-        docker run --rm -v "${MOO_VOLUME}":/moo alpine /bin/sh -c "mkdir -p /moo/executables /moo/files && chown -R ${FILE_OWNER} /moo" || { echo "Failed to change ownership of '${files}'."; exit 1; }
+        docker run --rm -v "${MOO_VOLUME}":/moo alpine /bin/sh -c "umask 0077 && mkdir -p /moo/executables /moo/files && chown -R ${FILE_OWNER} /moo" || { echo "Failed to change ownership of '${files}'."; exit 1; }
         docker compose -p "${MOO_NAME}" restart || { echo "Failed to restart Docker container for '${MOO_NAME}'."; exit 1; }
     fi
 }
@@ -69,7 +70,7 @@ toggle_running() {
 copy_to_moo() {
     local files=${3:-$1}
     docker cp $files "${MOO_CONTAINER}:/moo" || { echo "Failed to copy '${files}' to the volume '${MOO_VOLUME}'."; exit 1; }
-    docker run --rm -v "${MOO_VOLUME}":/moo alpine /bin/sh -c "chown -R ${FILE_OWNER} /moo" || { echo "Failed to change ownership of '${files}'."; exit 1; }
+    docker run --rm -v "${MOO_VOLUME}":/moo alpine /bin/sh -c "umask 0077 && chown -R ${FILE_OWNER} /moo" || { echo "Failed to change ownership of '${files}'."; exit 1; }
 }
 
 # Copy a file from the MOO container to the local directory.

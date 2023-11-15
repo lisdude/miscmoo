@@ -14,10 +14,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 #define MAX_ARGS        9               // Total number of potential arguments.
 #define DEFAULT_PORT    "7777"          // Default listening port.
 #define DATA_PATH       "/moo"          // The path to the database directory.
+#define DEFAULT_UMASK   0077            // Default permissions to use.
 
 int main(void) {
     char *arguments[MAX_ARGS];          // List of arguments (+1 for NULL)
@@ -84,6 +86,9 @@ int main(void) {
 
     // Mandatory end-of-args NULL:
     arguments[argCount++] = NULL;
+
+    // Set the umask
+    umask(DEFAULT_UMASK);
 
 #ifdef VERBOSE
     printf("Executing command: ");
