@@ -8,7 +8,7 @@ set -Eeuo pipefail
 MOO_NAME=${1:-}
 MOO_VOLUME="${MOO_NAME}_moo_data"
 MOO_CONTAINER="${MOO_NAME}-toaststunt-1"
-DB_FILE=$(grep -oP '(?<=- DATABASE=)[^[:space:].]+\.db' compose.yaml)
+DB_FILE=$(grep -oP '(?<=- DATABASE=)[^[:space:].]+\.db' compose.yaml 2>/dev/null || true)
 FILE_OWNER="65534:65534"
 DEFAULT_UMASK="0077"
 
@@ -24,6 +24,7 @@ Without any other arguments, your MOO will either start if it's not currently
 running or stop if it is currently running.
 
 Additional arguments:
+    bootstrap         Download all of the files necessary to run ToastStunt + ToastCore.
     emergency         Invoke emergency wizard mode in a temporary container.
     cp <file>         Copy <file> to the MOO volume.
     lcp <file>        Copy <file> from the MOO volume to the local filesystem.
@@ -39,7 +40,7 @@ exit
 # with appropriate ownership.
 setup_and_run() {
     if [ ! -f "${DB_FILE}" ]; then
-        echo "${DB_FILE} was not found. Unable to create Docker container."
+        echo "Database '${DB_FILE}' was not found. Unable to create Docker container."
         exit 1
     fi
 
@@ -124,8 +125,34 @@ export_data()
     cleanup_temp_container "${container_id}"
 }
 
+# Download everything necessary to run ToastStunt and ToastCore.
+bootstrap ()
+{
+    git clone https://github.com/lisdude/toaststunt || { echo "Failed to clone ToastStunt Git repository."; exit 1; }
+    cd toaststunt
+    git clone -n --depth=1 --filter=tree:0 https://github.com/lisdude/miscmoo || { echo "Failed to clone miscmoo Git repository."; exit 1; }
+    cd miscmoo
+    git sparse-checkout set --no-cone docker || { echo "Git sparse checkout failed."; exit 1; }
+    git checkout || { echo "Git checkout failed."; exit 1; }
+    mv docker ../
+    cd ..
+    mv docker/src/docker ./src
+    rmdir docker/src
+    rm docker/{moo_docker,README.md}
+    mv docker/* ./
+    rm -rf miscmoo
+    rmdir docker
+    curl -O https://raw.githubusercontent.com/lisdude/toastcore/master/toastcore.db || { echo "Failed to download ToastCore."; exit 1; }
+    cd ..
+    shopt -s dotglob; mv toaststunt/* ./; shopt -u dotglob
+    rmdir toaststunt
+    echo "Bootstrap complete! You can now start your MOO."
+}
+
 if [ $# -eq 0 ]; then
     usage
+elif [ "$1" == "bootstrap" ]; then
+    bootstrap
 elif [ $# -eq 1 ]; then
     toggle_running
 elif [ "$2" == "cp" ]; then
