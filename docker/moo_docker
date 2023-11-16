@@ -4,6 +4,11 @@
 
 set -Eeuo pipefail
 
+if ! [ -x "$(command -v docker)" ]; then
+    echo "You need the 'docker' command to continue."
+    exit
+fi
+
 # Some assumptions are made here about names of volumes, containers, etc...
 MOO_NAME=${1:-}
 MOO_VOLUME="${MOO_NAME}_moo_data"
@@ -128,6 +133,16 @@ export_data()
 # Download everything necessary to run ToastStunt and ToastCore.
 bootstrap ()
 {
+    if ! [ -x "$(command -v git)" ]; then
+        echo "You need the 'git' command to continue."
+        exit
+    fi
+
+    if ! [ -x "$(command -v curl)" ]; then
+        echo "You need the 'curl' command to continue."
+        exit
+    fi
+
     git clone https://github.com/lisdude/toaststunt || { echo "Failed to clone ToastStunt Git repository."; exit 1; }
     cd toaststunt
     git clone -n --depth=1 --filter=tree:0 https://github.com/lisdude/miscmoo || { echo "Failed to clone miscmoo Git repository."; exit 1; }
