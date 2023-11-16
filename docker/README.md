@@ -1,7 +1,7 @@
 This is a very minimal Docker image for Toaststunt intended to reduce the attack surface as much as possible by including as little as possible.
 
 # Quick Start
-1. Run the command `./moo_docker bootstrap`
+1. Run the command: `./moo_docker bootstrap` (Note: This will place files in the same directory as the script.)
 2. Start / stop your MOO by running: `./moo_docker <moo_name_no_spaces>`
 
 If you want to start from a database other than ToastCore, you'll need to edit the `compose.yaml` file.
